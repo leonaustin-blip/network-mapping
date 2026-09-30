@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+
+import socket
+import ipaddress
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+NETWORK = "192.168.10.0/24"
+
+# Common TCP ports used to identify an active host
+PORTS = [22, 80, 443, 445, 3389, 8080]
+
+TIMEOUT = 0.3
+THREADS = 100
+
+
+def check_host(ip):
+    open_ports = []
+
+    for port in PORTS:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(TIMEOUT)
+
+        try:
+            if sock.connect_ex((str(ip), port)) == 0:
+                open_ports.append(port)
+        except socket.error:
+            pass
+        finally:
+            sock.close()
+
+    if open_ports:
+        return str(ip), open_ports
+
+    return None
+
+
+def main():
+    network = ipaddress.ip_network(NETWORK, strict=False)
+    hosts = list(network.hosts())
+
+    print("=" * 55)
+    print("        Python Local Network Scanner")
+    print("=" * 55)
+    print(f"Network : {network}")
+    print(f"Hosts   : {len(hosts)}")
+    print()
+
+    found = []
+
+    with ThreadPoolExecutor(max_workers=THREADS) as executor:
+        jobs = {
+            executor.submit(check_host, ip): ip
+            for ip in hosts
+        }
+
+        for future in as_completed(jobs):
+            result = future.result()
+
+            if result:
+                ip, ports = result
+                found.append(result)
+
+                print(f"[+] {ip}  OPEN: {', '.join(map(str, ports))}")
+
+    print()
+    print("=" * 55)
+    print(f"Found {len(found)} responsive hosts")
+    print("=" * 55)
+
+
+if __name__ == "__main__":
+    main()
